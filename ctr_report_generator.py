@@ -1,6 +1,3 @@
-from urllib.parse import urlparse
-import time
-import ipaddress
 import requests
 import json
 import urllib3
@@ -30,7 +27,6 @@ def get_request_amp4e(param):
     url = "https://{}:{}@api.amp.cisco.com/v1/{}".format(AMP_CLIENT_ID, AMP_API_KEY, param)
     response = get(url)
     return response
-
 
 def get(url):
 
@@ -66,17 +62,35 @@ def enrich(ctr_token, observable, type):
 
     return response_json
 
-def get_indicators(module, vulnerability):
+def get_vulnerability(ctr_token, connector_guid):
 
-    if 'indicators' in module['data'] and module['data']['indicators']['count'] > 0:
-        docs = module['data']['indicators']['docs']
-        for doc in docs:
-            
-            tag = doc['tags'][0]
-            value = doc['short_description']
+    vulnerability = []
+    try:
+        response_json = enrich(ctr_token, connector_guid, "amp_computer_guid")
+    except:
+        print("=== NO RESPONSE FROM CTR ===")
+        response_json = ''
 
-            if tag == 'vulnerability' and value not in vulnerability:
-                vulnerability.append(value)
+    try:
+        for module in response_json['data']:
+            if len(module['data']) > 0:
+                try:
+                    if 'indicators' in module['data'] and module['data']['indicators']['count'] > 0:
+                        docs = module['data']['indicators']['docs']
+                        for doc in docs:
+                            
+                            tag = doc['tags'][0]
+                            value = doc['short_description']
+
+                            if tag == 'vulnerability' and value not in vulnerability:
+                                vulnerability.append(value)
+                except:
+                    print("=== ERROR VULNERABILITY DETECTION ===")
+                    vulnerability = ''
+    except:
+        print("=== MODULE ERROR === connector_guid {}".format(connector_guid))
+
+    return vulnerability
 
 def analyse_artifact(response_json):
     threat_intel = dict()
@@ -108,115 +122,48 @@ def analyse_artifact(response_json):
 
     return (threat_intel, attack_patterns, tags)
 
-def get_sightings(ctr_token, module, sha256, IPs, url, benign):
-    
-    threat_intel = dict()
-    attack_patterns = []
-    tags = []
 
-    if 'sightings' in module['data'] and module['data']['sightings']['count'] > 0:
-        docs = module['data']['sightings']['docs']
-        for doc in docs:
-            for relation in doc['relations']:
+def get_malicious_files(param):
 
-                value = relation['related']['value'] 
-                type = relation['related']['type'] 
+    sha256 = []
+    try:
+        response_json = get_request_amp4e(param)
+    except:
+        print("=== NO RESPONSE FROM AMP4E ===")
+        response_json = ''
 
-                if type == 'url':
-                    try:
-                        parsed_uri = urlparse(value)
-                        value = '{uri.scheme}://{uri.netloc}/'.format(uri=parsed_uri)
-                    except:
-                        print('=== URL Parse ERROR {}'.format(value))
-                        value = ''
+    try:
+        for data in response_json['data']:
+            if 'file' in data:
+                file = data['file']
+                disposition = file['disposition']
+                file_sha256 = file['identity']['sha256']
 
-                if type == 'sha256' and value not in sha256 and value not in benign:
-                    reputation_json = enrich(ctr_token, value, 'sha256')
-                    (threat_intel, attack_patterns, tags) = analyse_artifact(reputation_json)
-                    if 'Malicious' in threat_intel.values():
-                        sha256.append(value)
-                    else:
-                        benign.append(value)
-                    
-                elif type == 'ip' and value not in IPs and value not in benign:
-                    if not ipaddress.ip_address(value).is_private:
-                        reputation_json = enrich(ctr_token, value, 'ip')
-                        (threat_intel, attack_patterns, tags) = analyse_artifact(reputation_json)
-                        if 'Malicious' in threat_intel.values():
-                            IPs.append(value)
-                        else:
-                            benign.append(value)
+                if 'identity' in file and disposition == 'Malicious' and file_sha256 not in sha256:
+                    sha256.append(file_sha256)
+    except:
+        print("===BREAK===")
 
-                elif type == 'url' and value not in url and value not in benign:
-                    reputation_json = enrich(ctr_token, value, 'url')
-                    (threat_intel, attack_patterns, tags) = analyse_artifact(reputation_json)
-                    if 'Malicious' in threat_intel.values():
-                        url.append(value)
-                    else:
-                        benign.append(value)
-                elif type != 'ip' and type != 'sha256' and type != 'url':
-                    print("----- ATTENTION ------- {} {}".format(type, value))
-
-    return (threat_intel, attack_patterns, tags)
+    return sha256
 
 def main():
 
    ctr_token = generate_ctr_token()
    computers = get_request_amp4e('computers')
    for pc in computers['data']:
+
         connector_guid = pc['connector_guid']
         param = 'events?connector_guid[]=' + connector_guid
-        response_json = get_request_amp4e(param)
- 
-        sha256 = []
-        IPs = []
-        url = []
-        vulnerability = []
-        benign = []
-        threat_intel = []
-        attack_patterns = []
-        tags = []
-       
-        try:
-            for data in response_json['data']:
-                if 'file' in data:
-                    file = data['file']
-                    disposition = file['disposition']
-                    file_sha256 = file['identity']['sha256']
- 
-                    if 'identity' in file and disposition == 'Malicious' and file_sha256 not in sha256:
-                        sha256.append(file_sha256)
-        except:
-            print("===BREAK===")
-            continue
 
+        sha256 = get_malicious_files(param)
         for file in sha256:
             print("Malicious File {}".format(file))
             reputation_json = enrich(ctr_token, file, 'sha256')
             (threat_intel, attack_patterns, tags) = analyse_artifact(reputation_json)
 
-        response_json = enrich(ctr_token, connector_guid, "amp_computer_guid")
+        vulnerability = get_vulnerability(ctr_token, connector_guid)
 
-        try:
-            for module in response_json['data']:
-                if len(module['data']) > 0:
-                    try:
-                        get_indicators(module, vulnerability)
-                    except:
-                        print("MY_ERROR")
-                    '''            
-                    try:
-                        (threat_intel, attack_pattern) = get_sightings(ctr_token, module, sha256, IPs, url, benign)
-                    except:
-                        print("Error")
-                    '''
-        except:
-            print("=== MODULE ERROR === connector_guid {}".format(connector_guid))
+        print('connector_guid {} sha256 {} vulnerability {} threat_intel {} attack_pattern {} tags {}\n\n\n'.format(connector_guid, sha256, vulnerability, threat_intel, attack_patterns, tags))
 
-        print('connector_guid {} sha256 {} IPs {} url {} vulnerability {} threat_intel {} attack_pattern {} tab {}\n\n\n'.format(connector_guid, sha256, IPs, url, vulnerability, threat_intel, attack_patterns, tags))
-
-
-        
 if __name__ == '__main__':
-    a=1
     main()
