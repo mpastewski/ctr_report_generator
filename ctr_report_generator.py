@@ -3,6 +3,9 @@ import time
 import ipaddress
 import requests
 import json
+import urllib3
+
+urllib3.disable_warnings()
 
 AMP_CLIENT_ID = "77acbb17e6380dc14dfe"
 AMP_API_KEY = "bd1972d1-db07-4486-833b-1ba086f57ec6"
@@ -22,9 +25,9 @@ def generate_ctr_token():
     access_token = response['access_token']
     return access_token
 
-def get_list_of_computers():
+def get_request_amp4e(param):
 
-    url = "https://{}:{}@api.amp.cisco.com/v1/computers".format(AMP_CLIENT_ID, AMP_API_KEY)
+    url = "https://{}:{}@api.amp.cisco.com/v1/{}".format(AMP_CLIENT_ID, AMP_API_KEY, param)
     response = get(url)
     return response
 
@@ -159,22 +162,41 @@ def get_sightings(ctr_token, module, sha256, IPs, url, benign):
 def main():
 
    ctr_token = generate_ctr_token()
-   computers = get_list_of_computers()
+   computers = get_request_amp4e('computers')
    for pc in computers['data']:
         connector_guid = pc['connector_guid']
-        response_json = enrich(ctr_token, connector_guid, "amp_computer_guid")
-
-        threat_intel = dict()
-        attack_patterns = []
-        tags = []
-
-
+        param = 'events?connector_guid[]=' + connector_guid
+        response_json = get_request_amp4e(param)
+ 
         sha256 = []
         IPs = []
         url = []
         vulnerability = []
         benign = []
-        
+        threat_intel = []
+        attack_patterns = []
+        tags = []
+       
+        try:
+            for data in response_json['data']:
+                if 'file' in data:
+                    file = data['file']
+                    disposition = file['disposition']
+                    file_sha256 = file['identity']['sha256']
+ 
+                    if 'identity' in file and disposition == 'Malicious' and file_sha256 not in sha256:
+                        sha256.append(file_sha256)
+        except:
+            print("===BREAK===")
+            continue
+
+        for file in sha256:
+            print("Malicious File {}".format(file))
+            reputation_json = enrich(ctr_token, file, 'sha256')
+            (threat_intel, attack_patterns, tags) = analyse_artifact(reputation_json)
+
+        response_json = enrich(ctr_token, connector_guid, "amp_computer_guid")
+
         try:
             for module in response_json['data']:
                 if len(module['data']) > 0:
@@ -182,19 +204,19 @@ def main():
                         get_indicators(module, vulnerability)
                     except:
                         print("MY_ERROR")
-            
+                    '''            
                     try:
                         (threat_intel, attack_pattern) = get_sightings(ctr_token, module, sha256, IPs, url, benign)
                     except:
                         print("Error")
+                    '''
         except:
             print("=== MODULE ERROR === connector_guid {}".format(connector_guid))
 
+        print('connector_guid {} sha256 {} IPs {} url {} vulnerability {} threat_intel {} attack_pattern {} tab {}\n\n\n'.format(connector_guid, sha256, IPs, url, vulnerability, threat_intel, attack_patterns, tags))
 
-        #if sha256 or IPs or url or vulnerability:
-        print('connector_guid {} sha256 {} IPs {} url {} vulnerability {} threat_intel {} attack_pattern {}'.format(connector_guid, sha256, IPs, url, vulnerability, threat_intel, attack_patterns))
 
+        
 if __name__ == '__main__':
-    start_time = time.time()
+    a=1
     main()
-    print("--- %s seconds --- {}".format(time.time() - start_time))
