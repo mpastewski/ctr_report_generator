@@ -1,3 +1,8 @@
+from collections import OrderedDict
+from operator import itemgetter   
+from reportlab.pdfgen import canvas
+import matplotlib.pyplot as plt
+import numpy as np
 import requests
 import json
 import urllib3
@@ -120,7 +125,7 @@ def analyse_artifact(response_json):
                     except:
                         continue
 
-    return (threat_intel, attack_patterns, tags)
+    return [threat_intel, attack_patterns, tags]
 
 
 def get_malicious_files(param):
@@ -146,24 +151,99 @@ def get_malicious_files(param):
 
     return sha256
 
+def generate_diagram(var, title, x_label, y_label, filename):
+    var = OrderedDict(sorted(var.items(), key=itemgetter(1), reverse=True))
+    plt.bar(range(len(var)), list(var.values()), align='center')
+    plt.xticks(range(len(var)), list(var.keys()), rotation=30, fontsize=5)
+    plt.xlabel(x_label, fontsize=5)
+    plt.ylabel(y_label, fontsize=12)
+    plt.title(title, fontsize=12)
+    plt.savefig(filename)
+    plt.clf()
+
+def count_occurances(list, threshold):
+    d = dict()
+    for el in list:
+        if list.count(el) > threshold:
+            d[el] = list.count(el)
+    return d
+
 def main():
 
-   ctr_token = generate_ctr_token()
-   computers = get_request_amp4e('computers')
-   for pc in computers['data']:
+    result = []
+    ctr_token = generate_ctr_token()
+    computers = get_request_amp4e('computers')
+    for pc in computers['data']:
 
         connector_guid = pc['connector_guid']
+        hostname = pc['hostname']
         param = 'events?connector_guid[]=' + connector_guid
 
         sha256 = get_malicious_files(param)
+        threat_intel = dict()
+        attack_patterns = []
+        tags = []
+        ret = []
         for file in sha256:
-            print("Malicious File {}".format(file))
             reputation_json = enrich(ctr_token, file, 'sha256')
-            (threat_intel, attack_patterns, tags) = analyse_artifact(reputation_json)
+            r = analyse_artifact(reputation_json)
+            ret.append([file, r])
 
         vulnerability = get_vulnerability(ctr_token, connector_guid)
 
-        print('connector_guid {} sha256 {} vulnerability {} threat_intel {} attack_pattern {} tags {}\n\n\n'.format(connector_guid, sha256, vulnerability, threat_intel, attack_patterns, tags))
+        try:
+            if vulnerability or len(ret[0][1]):
+                result.append([[connector_guid, hostname], ret, vulnerability])
+        except:
+            continue
+           
+    return result
 
-if __name__ == '__main__':
-    main()
+if __name__ == '__main__':    
+    res = main()
+
+    (list_of_tags, list_of_malware) = ([], [])
+    malware_per_pc = dict()
+    vulnerability = dict()
+    for pc in res:
+        hostname = pc[0][1]
+        vuln = pc[2]
+        number_of_malware = len(pc[1])
+        if number_of_malware > 2:
+            malware_per_pc[hostname] = number_of_malware
+        try:
+            if vuln:
+                vulnerability[hostname] = len(vuln)
+            for m in pc[1]:
+                try:
+                    list_of_malware.append(m[0])
+                except:
+                    continue
+                try:
+                    for tag in m[1][2]:
+                        list_of_tags.append(tag)
+                except:
+                    continue
+        except:
+            continue
+
+    print("Endpoints detected: {}".format(len(res)))
+    print("Infections detected: {}".format(len(list_of_malware)))
+
+
+    tag = count_occurances(list_of_tags, 5)
+    malware = count_occurances(list_of_malware, 0)
+    
+    #TODO: What if max(malware) does not have enough info to display?
+    top_threat = max(malware.items(), key=itemgetter(1))[0]
+    for pc in res:
+        for threat in pc[1]:
+            if threat[0] == top_threat:
+                top_threat = threat[1]
+                break
+
+    generate_diagram(malware, 'Top malware', 'PC', 'Occurance', 'malware.png')
+    generate_diagram(malware_per_pc, 'Top PCs with malware', 'PC', 'Malware', 'malware_per_pc.png')
+    generate_diagram(vulnerability, 'Top vulnerable endpoints', 'PC', 'Vulnerability', 'vulnerability_per_pc.png')
+    generate_diagram(tag, 'Most common tags', 'Tag', '', 'tags.png')
+
