@@ -154,11 +154,11 @@ def get_malicious_files(param):
 def generate_diagram(var, title, x_label, y_label, filename):
     var = OrderedDict(sorted(var.items(), key=itemgetter(1), reverse=True))
     plt.bar(range(len(var)), list(var.values()), align='center')
-    plt.xticks(range(len(var)), list(var.keys()), rotation=30, fontsize=5)
-    plt.xlabel(x_label, fontsize=5)
-    plt.ylabel(y_label, fontsize=12)
-    plt.title(title, fontsize=12)
-    plt.savefig(filename)
+    plt.xticks(range(len(var)), list(var.keys()), rotation=30, fontsize=10)
+    plt.xlabel(x_label, fontsize=16)
+    plt.ylabel(y_label, fontsize=16)
+    plt.title(title, fontsize=16)
+    plt.savefig(filename, dpi=100)
     plt.clf()
 
 def count_occurances(list, threshold):
