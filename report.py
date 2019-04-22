@@ -4,7 +4,7 @@ from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import inch
 
-doc = SimpleDocTemplate("form_letter.pdf",pagesize=letter,
+doc = SimpleDocTemplate("pov_report.pdf",pagesize=letter,
                         rightMargin=72,leftMargin=72,
                         topMargin=72,bottomMargin=18)
 Report=[]
@@ -22,13 +22,11 @@ Report.append(Paragraph(ptext, styleN))
 Report.append(Spacer(1, 12))
 
 logo = "malware_per_pc.png"
-im = Image(logo, 3*inch, 3*inch)
+im = Image(logo, 3.5*inch, 3.5*inch)
 Report.append(im)
 Report.append(Spacer(1, 12))
 
-ptext = '<font size=12>Endpoints detected: %s</font>' % (len(res))
-Report.append(Paragraph(ptext, styleN))
-ptext = '<font size=12>Infections detected: %s</font>' % (len(list_of_malware))
+text = '<font size=12>Infections detected: %s</font>' % (len(list_of_malware))
 Report.append(Paragraph(ptext, styleN))
 Report.append(Spacer(1, 12))
 
@@ -40,7 +38,7 @@ Report.append(Spacer(1, 12))
 
 
 logo = 'vulnerability_per_pc.png'
-im = Image(logo, 3*inch, 3*inch)
+im = Image(logo, 3.5*inch, 3.5*inch)
 Report.append(im)
 Report.append(Spacer(1, 12))
 Report.append(Spacer(1, 12))
@@ -51,7 +49,7 @@ Report.append(Paragraph(ptext, styleN))
 Report.append(Spacer(1, 12))
 
 logo = 'tags.png'
-im = Image(logo, 3*inch, 3*inch)
+im = Image(logo, 3.5*inch, 3.5*inch)
 Report.append(im)
 Report.append(Spacer(1, 12))
 

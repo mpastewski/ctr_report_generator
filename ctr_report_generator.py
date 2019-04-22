@@ -8,10 +8,10 @@ import urllib3
 
 urllib3.disable_warnings()
 
-AMP_CLIENT_ID = "77acbb17e6380dc14dfe"
-AMP_API_KEY = "bd1972d1-db07-4486-833b-1ba086f57ec6"
-CTR_USER = 'client-0fab5a40-d595-46cf-bf42-1a505bf495eb'
-CTR_PASSWORD = 'at1loYXO_YW__BB1Mfj4JOdmrfYYH0iOFdNadxlflL6GvF7_SfB6Wg'
+AMP_CLIENT_ID = ""
+AMP_API_KEY = ""
+CTR_USER = ""
+CTR_PASSWORD = ""
  
 SESSION = requests.session()
 
