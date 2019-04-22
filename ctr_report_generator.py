@@ -1,6 +1,5 @@
 from collections import OrderedDict
 from operator import itemgetter   
-from reportlab.pdfgen import canvas
 import matplotlib.pyplot as plt
 import numpy as np
 import requests
@@ -158,6 +157,7 @@ def generate_diagram(var, title, x_label, y_label, filename):
     plt.xlabel(x_label, fontsize=16)
     plt.ylabel(y_label, fontsize=16)
     plt.title(title, fontsize=16)
+    plt.tight_layout()
     plt.savefig(filename, dpi=100)
     plt.clf()
 
@@ -227,10 +227,6 @@ if __name__ == '__main__':
         except:
             continue
 
-    print("Endpoints detected: {}".format(len(res)))
-    print("Infections detected: {}".format(len(list_of_malware)))
-
-
     tag = count_occurances(list_of_tags, 5)
     malware = count_occurances(list_of_malware, 0)
     
@@ -239,6 +235,7 @@ if __name__ == '__main__':
     for pc in res:
         for threat in pc[1]:
             if threat[0] == top_threat:
+                sha256 = top_threat
                 top_threat = threat[1]
                 break
 
